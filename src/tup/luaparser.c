@@ -694,16 +694,19 @@ static char *get_rooted_dir(tupid_t end, const char *suffix)
 	char *out = NULL;
 	struct tent_list_head endlist;
 	struct tent_list *endentry;
-	int count = 0;
-	int suffixlen = 0;
-	if (suffix) 
-		suffixlen = strlen(suffix);
-
+	struct pel_group suffixpg;
+	struct path_element *suffixpel;
 	int len = 0;
+	int count = 0;
+	
+	if(suffix) {
+		if(get_path_elements(suffix, &suffixpg) < 0) return NULL;
+		suffixpel = TAILQ_LAST(&suffixpg.path_list, path_element_head);
+	}
 
 	TAILQ_INIT(&endlist);
 	if(get_full_path_tents(end, &endlist) < 0)
-		return NULL;
+		goto errorexit;
 	
 	// Calculate string length
 	TAILQ_FOREACH(endentry, &endlist, list) {
@@ -715,8 +718,11 @@ static char *get_rooted_dir(tupid_t end, const char *suffix)
 		}
 		count++;
 	}
-	if(count >= 2 && suffix) {
-		len += 1 + suffixlen;
+	if(suffix) {
+		if(count >= 2) {
+			len += 1;
+		}
+		len += suffixpel->len;
 	}
 
 	out = malloc(len + 1);
@@ -736,12 +742,20 @@ static char *get_rooted_dir(tupid_t end, const char *suffix)
 		}
 		count++;
 	}
-	if(count >= 2 && suffix) {
-		sprintf(out + len, "%s%s", PATH_SEP_STR, suffix);
+	if(suffix) {
+		if(count >= 2) {
+			sprintf(out + len, "%s", PATH_SEP_STR);
+			len += 1;
+		}
+		sprintf(out + len, "%*.*s", suffixpel->len, suffixpel->len, suffixpel->path);
 	}
 
 	free_tent_list(&endlist);
+	del_pel_group(&suffixpg);
 	return out;
+errorexit:
+	del_pel_group(&suffixpg);
+	return NULL;
 }
 
 static int tuplua_function_getrooted(lua_State *ls)
